@@ -48,6 +48,41 @@ is set to that zone.
 Still to come: a modifier gate so not *every* drag snaps, a visual zone editor,
 layout persistence, multi-monitor handling, and keyboard shortcuts.
 
+## Two implementations
+
+The project deliberately has two parallel tracks:
+
+- **`src/` — QML `declarativescript`** (above). Simple, unprivileged, and fully
+  testable on the X11/Xvfb harness. Its limit: a KWin *script* cannot observe
+  keyboard/mouse state *during* a drag, so it can't reproduce FancyZones' exact
+  *hold-a-modifier-while-dragging* behavior.
+
+- **`effect/` — C++ KWin effect** (the path to the **exact** FancyZones drag
+  experience). An effect runs inside the compositor and *can* read live
+  pointer + modifier state mid-drag (which the script can't). v0.3 is a proven
+  foundation: it builds against `kwin-dev`, loads into a headless `kwin_wayland`
+  session, and reads the Shift modifier live during injected input.
+
+### Testing the effect
+
+The effect needs a real compositor, so it can't use the X11/Xvfb harness. Instead
+`scripts/test-effect.sh` runs a **privileged** container that:
+
+```
+kwin_wayland --virtual          ← software-composited headless session
+  └─ effect/ built via CMake, loaded via the Effects D-Bus interface
+scripts/harness-wayland/fakeinput.c  ← injects pointer + keyboard via the
+                                       org_kde_kwin_fake_input Wayland protocol
+```
+
+```bash
+./scripts/test-effect.sh
+# => EFFECT TEST PASSED — C++ effect loaded headless and read the Shift modifier live
+```
+
+(First run installs build deps into the container and is slow; this will move into
+a dedicated build image.)
+
 ## Repo layout
 
 ```
