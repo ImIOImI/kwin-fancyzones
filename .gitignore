@@ -1,0 +1,10 @@
+# Test harness output (logs, screenshots)
+out/
+*.log
+*.png
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
