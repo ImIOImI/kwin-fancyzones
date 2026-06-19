@@ -80,8 +80,29 @@ scripts/harness-wayland/fakeinput.c  ← injects pointer + keyboard via the
 # => EFFECT TEST PASSED — C++ effect loaded headless and read the Shift modifier live
 ```
 
-(First run installs build deps into the container and is slow; this will move into
-a dedicated build image.)
+## Testing image
+
+`docker/Dockerfile.effect` is a **comprehensive testing image** with everything both
+harnesses need baked in — the window managers (`kwin_x11`, `kwin_wayland`), the X11
+headless stack, software GL/EGL (llvmpipe), the C++ effect build toolchain
+(`cmake`/`kwin-dev`/Qt6/KF6), and the Wayland protocol tooling. No per-run
+`apt-install`.
+
+CI (`.github/workflows/testing-image.yml`) builds it, runs **both** harnesses against
+it, and — only if they pass — publishes it to GHCR:
+
+```
+ghcr.io/imioimi/kwin-fancyzones-test:latest
+```
+
+Use it locally instead of building:
+
+```bash
+FZ_IMAGE=ghcr.io/imioimi/kwin-fancyzones-test:latest ./scripts/test-effect.sh
+```
+
+Or build it locally: `./scripts/build-effect-image.sh` (→ `kwin-fancyzones-test:dev`,
+the default for `test-effect.sh`).
 
 ## Repo layout
 

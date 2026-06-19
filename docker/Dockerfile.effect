@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# Comprehensive testing image for kwin-fancyzones — everything both harnesses need:
+#   - X11/Xvfb script harness  (kwin_x11 + xdotool + screenshots)
+#   - Wayland effect harness    (kwin_wayland --virtual + software EGL + fake_input)
+#   - C++ effect build toolchain (cmake/ECM/g++ + kwin-dev + Qt6/KF6 dev)
+#
+# Published to GHCR by .github/workflows/testing-image.yml so the test loop needs no
+# per-run apt-install. Build locally with scripts/build-effect-image.sh.
+ARG UBUNTU_VERSION=25.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+LABEL org.opencontainers.image.title="kwin-fancyzones-test" \
+      org.opencontainers.image.description="Headless KWin 6 test image (X11 script + Wayland effect harnesses + C++ build toolchain)" \
+      org.opencontainers.image.source="https://github.com/ImIOImI/kwin-fancyzones"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    DISPLAY=:99 \
+    XDG_RUNTIME_DIR=/tmp/xdg-runtime \
+    HOME=/root \
+    FZ_SRC=/opt/fz/src
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      # --- window managers under test ---
+      kwin-x11 kwin-common kwin-wayland \
+      # --- X11 headless stack + input/screenshot tooling ---
+      xvfb x11-utils x11-xserver-utils x11-apps xdotool wmctrl xterm xfonts-base \
+      imagemagick dbus-x11 libglib2.0-bin \
+      # --- GL: software rasterizer (GLX for X11) + EGL (for kwin_wayland compositing) ---
+      libgl1-mesa-dri libegl1 libegl-mesa0 libgles2 \
+      # --- C++ effect build toolchain ---
+      cmake extra-cmake-modules g++ make \
+      kwin-dev qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
+      libkf6coreaddons-dev libxkbcommon-dev \
+      # --- Wayland protocol tooling (fake_input client build) ---
+      libwayland-dev libwayland-bin plasma-wayland-protocols \
+      # --- misc ---
+      procps psmisc ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Disable compositing by default (the X11 harness needs none); the Wayland effect
+# harness forces software compositing via KWIN_COMPOSE at runtime.
+RUN mkdir -p /root/.config \
+    && printf '[Compositing]\nEnabled=false\n' > /root/.config/kwinrc
+
+# X11 harness scripts baked in (Wayland harness is bind-mounted for fast iteration).
+COPY scripts/harness/ /opt/fz/harness/
+COPY docker/entrypoint.sh /opt/fz/entrypoint.sh
+RUN chmod +x /opt/fz/harness/*.sh /opt/fz/entrypoint.sh
+
+WORKDIR /opt/fz
+ENTRYPOINT ["/opt/fz/entrypoint.sh"]
+CMD ["test"]

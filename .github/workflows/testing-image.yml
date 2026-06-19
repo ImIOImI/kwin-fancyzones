@@ -1,0 +1,64 @@
+name: testing-image
+
+# Build the comprehensive testing image, verify both harnesses against it, and
+# publish it to GHCR (ghcr.io/<owner>/kwin-fancyzones-test) only if tests pass.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/Dockerfile.effect'
+      - 'docker/entrypoint.sh'
+      - 'scripts/**'
+      - 'effect/**'
+      - 'src/**'
+      - '.github/workflows/testing-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image name (GHCR requires lowercase owner)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kwin-fancyzones-test" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build testing image
+        run: |
+          docker build \
+            -t "$IMAGE:latest" -t "$IMAGE:${GITHUB_SHA::12}" \
+            -f docker/Dockerfile.effect .
+
+      - name: Script harness (X11/Xvfb, unprivileged) — overlay + snapping
+        run: |
+          mkdir -p out
+          docker run --rm \
+            -v "$PWD/src:/opt/fz/src:ro" \
+            -v "$PWD/out:/opt/fz/logs" \
+            "$IMAGE:latest" test
+
+      - name: Effect harness (Wayland, privileged) — C++ effect + fake_input
+        run: |
+          docker run --rm --privileged \
+            -v "$PWD/effect:/opt/effect:ro" \
+            -v "$PWD/scripts/harness-wayland:/opt/hw:ro" \
+            -v "$PWD/out:/logs" \
+            --tmpfs /work:exec \
+            "$IMAGE:latest" bash /opt/hw/run-effect-test.sh
+
+      - name: Publish image to GHCR
+        run: |
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${GITHUB_SHA::12}"
