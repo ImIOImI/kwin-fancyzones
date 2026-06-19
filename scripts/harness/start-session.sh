@@ -8,11 +8,7 @@ source "$DIR/lib.sh"
 
 fz_start_session
 
-if [ -f "$FZ_SRC/contents/code/main.js" ]; then
-  fz_load_script "$FZ_SRC/contents/code/main.js" "fancyzones" || true
-else
-  log "no KWin script at $FZ_SRC/contents/code/main.js (nothing to load)"
-fi
+fz_load_script fancyzones || log "no script loaded"
 
 log "session up. DISPLAY=$DISPLAY  logs=$FZ_LOG_DIR"
 if [ "${1:-}" = "--hold" ]; then

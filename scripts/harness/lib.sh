@@ -36,7 +36,7 @@ fz_start_xvfb() {
 fz_start_kwin() {
   # KWin scripting print() output is routed through Qt logging categories; enable
   # the relevant ones so script logs land in kwin.log.
-  export QT_LOGGING_RULES="${QT_LOGGING_RULES:-kwin_scripting.debug=true;js.debug=true}"
+  export QT_LOGGING_RULES="${QT_LOGGING_RULES:-kwin_scripting.debug=true;js.debug=true;qml.debug=true}"
   log "starting kwin_x11"
   kwin_x11 --replace >"$FZ_LOG_DIR/kwin.log" 2>&1 &
   FZ_KWIN_PID=$!
@@ -59,27 +59,42 @@ fz_start_session() {
   fz_start_kwin
 }
 
-# Load a KWin JS script by file path.
-#   $1 = path to main.js
-#   $2 = plugin name (optional, default "fancyzones")
+# Load the mounted KWin script, auto-detecting flavor:
+#   QML (contents/ui/main.qml)  -> loadDeclarativeScript
+#   plain JS (contents/code/main.js) -> loadScript
+#   $1 = plugin name (optional, default "fancyzones")
 # Echoes the script id.
 fz_load_script() {
-  local path="$1" name="${2:-fancyzones}" out id
-  log "loading KWin script: $path"
+  local name="${1:-fancyzones}" qml="$FZ_SRC/contents/ui/main.qml" js="$FZ_SRC/contents/code/main.js"
+  local method path out id
+  if [ -f "$qml" ]; then
+    method=loadDeclarativeScript; path="$qml"
+  elif [ -f "$js" ]; then
+    method=loadScript; path="$js"
+  else
+    log "no script found under $FZ_SRC (ui/main.qml or code/main.js)"; return 1
+  fi
+  log "$method: $path"
   out=$(gdbus call --session --dest org.kde.KWin --object-path /Scripting \
-          --method org.kde.kwin.Scripting.loadScript "$path" "$name" 2>&1) || {
-    log "loadScript failed: $out"
-    return 1
+          --method "org.kde.kwin.Scripting.$method" "$path" "$name" 2>&1) || {
+    log "$method failed: $out"; return 1
   }
   id=$(echo "$out" | grep -oE '[0-9]+' | head -1)
-  log "loadScript returned id=${id:-?}"
-  # Start scripts. The method name has moved across versions, so try the known forms.
+  log "$method returned id=${id:-?}"
+  # Start scripts (method name varies across versions; try the known forms).
   gdbus call --session --dest org.kde.KWin --object-path /Scripting \
         --method org.kde.kwin.Scripting.start >/dev/null 2>&1 \
     || gdbus call --session --dest org.kde.KWin --object-path "/Scripting/Script${id}" \
             --method org.kde.kwin.Script.run >/dev/null 2>&1 \
     || log "note: no explicit start succeeded (script may auto-start on load)"
   echo "${id:-0}"
+}
+
+# True if a script with the given plugin name is loaded. $1 = name (default fancyzones).
+fz_is_loaded() {
+  local name="${1:-fancyzones}"
+  gdbus call --session --dest org.kde.KWin --object-path /Scripting \
+    --method org.kde.kwin.Scripting.isScriptLoaded "$name" 2>/dev/null | grep -q true
 }
 
 # Spawn a normal test window. $1 = title. Echoes its PID.

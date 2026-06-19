@@ -19,31 +19,34 @@ a GNOME-on-Wayland app. See the [KWin scripting docs](https://develop.kde.org/do
 
 ## Status
 
-**v0.1 — core snapping works**, validated headlessly. The repo contains:
+**v0.2 — drag-time overlay + snapping**, validated headlessly (overlay rendering
+confirmed by screenshot). The repo contains:
 
 - A **headless KWin 6 test environment** (Docker) so changes are validated
   automatically on this machine.
-- A **KWin script** (`src/`) that snaps a window to a zone when you finish moving
-  it, with **overlapping zones** resolved by a smallest-zone-wins rule.
+- A **QML KWin script** (`src/`, a `declarativescript` package) that shows a
+  translucent overlay of all zones while you drag a window, highlights the active
+  zone with a filled glow, and snaps the window to it on drop — with **overlapping
+  zones** that KDE's built-in recursive-split tiling can't express.
 
 ### How snapping works
 
 Zones are defined as percentages of the screen work area and **may overlap**. The
-default layout is a 3-column grid plus a centered `focus` zone that overlaps the
+default layout is a 3-column grid plus a lower-center `focus` zone that overlaps the
 middle column:
 
 ```
-ZONES = [ left | middle | right ]  +  focus (centered, overlapping middle)
+ZONES = [ left | middle | right ]  +  focus (lower-center, overlapping middle)
 ```
 
-On `interactiveMoveResizeFinished`, the script reads `workspace.cursorPos`, finds
-every zone containing the cursor, and snaps the window to the **smallest** one — so
-a small zone stacked on a big one stays reachable. (This overlap behavior is the
-gap vs. KDE's built-in recursive-split tiling.)
+While a window is being moved, a click-through `PlasmaCore.Dialog` overlay draws
+every zone; a polling timer reads `Workspace.cursorPos` and highlights the zone
+under the cursor. **Overlap rule:** among the zones containing the cursor, the one
+whose **center is nearest the cursor** wins. On drop the window's `frameGeometry`
+is set to that zone.
 
-Still to come: a modifier gate so not *every* drag snaps, the **drag-time visual
-overlay**, a visual zone editor, layout persistence, multi-monitor handling, and
-keyboard shortcuts.
+Still to come: a modifier gate so not *every* drag snaps, a visual zone editor,
+layout persistence, multi-monitor handling, and keyboard shortcuts.
 
 ## Repo layout
 
@@ -60,8 +63,8 @@ scripts/
     run-smoke-test.sh # quick check: session up + script loads cleanly
     run-snap-test.sh  # behavioral: drag a window into the overlapping zone
 src/                  # the KWin script package (bind-mounted into the container)
-  metadata.json
-  contents/code/main.js
+  metadata.json       # declarativescript, MainScript = ui/main.qml
+  contents/ui/main.qml
 out/                  # harness logs + screenshots (git-ignored)
 ```
 
@@ -74,7 +77,8 @@ that boots a headless KWin 6 session:
 ```
 Xvfb (virtual X11 display)
   └─ kwin_x11            ← the window manager under test
-       └─ KWin script    ← src/contents/code/main.js, loaded via D-Bus (gdbus)
+       └─ KWin script    ← src/contents/ui/main.qml, loaded via D-Bus
+                           (gdbus → Scripting.loadDeclarativeScript)
 xdotool                  ← drives the mouse to simulate window drags (XTEST)
 imagemagick              ← screenshots for visual verification
 ```
@@ -104,15 +108,17 @@ Run the tests (builds automatically if the image is missing):
 A pass looks like:
 
 ```
-SMOKE TEST PASSED — KWin is up and the script loaded cleanly
+SMOKE TEST PASSED — KWin is up and the 'fancyzones' script is loaded
 SNAP TEST PASSED — window snapped to the overlapping 'focus' zone (...)
 ```
 
-The snap test drags a window so the cursor finishes at screen center — a point
-inside both the `middle` column and the smaller `focus` zone — and asserts the
-window snapped to `focus`, proving overlap resolution.
+The snap test drags a window toward the `focus` zone's center — a point inside both
+the full-height `middle` column and the smaller `focus` zone — and asserts the window
+snapped to `focus`, proving the nearest-center overlap rule. It also captures the
+overlay mid-drag.
 
-Logs and screenshots land in `./out/` (`kwin.log`, `xvfb.log`, `smoke.png`, `snap.png`).
+Logs and screenshots land in `./out/`: `kwin.log`, `xvfb.log`, `overlay.png` (zones
+shown mid-drag), `snap.png` (result).
 
 ### Iterating on the KWin script
 

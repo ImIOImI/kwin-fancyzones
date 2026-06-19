@@ -3,12 +3,13 @@
         "Id": "fancyzones",
         "Name": "KWin FancyZones",
         "Description": "FancyZones-style window snapping with overlapping zones for KWin",
-        "Version": "0.0.1",
+        "Version": "0.2.0",
         "License": "MIT",
         "Authors": [{ "Name": "Troy Knapp" }],
         "EnabledByDefault": true
     },
     "KPackageStructure": "KWin/Script",
-    "X-Plasma-API": "javascript",
-    "X-Plasma-MainScript": "code/main.js"
+    "X-Plasma-API": "declarativescript",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml"
 }
