@@ -114,6 +114,21 @@ fz_drag() {
   sleep 0.3
 }
 
+# Move a window by holding the Plasma "move" modifier (Meta/Super) and dragging
+# from (x1,y1) to (x2,y2). Unlike fz_drag, this fires KWin's interactive-move
+# signals (interactiveMoveResizeStarted/Finished) from anywhere on the window,
+# so it doesn't depend on hitting the titlebar pixel-perfectly.
+fz_meta_drag() {
+  xdotool keydown super
+  xdotool mousemove "$1" "$2" mousedown 1
+  sleep 0.2
+  xdotool mousemove "$3" "$4"
+  sleep 0.2
+  xdotool mouseup 1
+  xdotool keyup super
+  sleep 0.4
+}
+
 # Capture the root window. $1 = output path (default $FZ_LOG_DIR/screenshot.png).
 fz_screenshot() {
   local out="${1:-$FZ_LOG_DIR/screenshot.png}"

@@ -19,29 +19,46 @@ a GNOME-on-Wayland app. See the [KWin scripting docs](https://develop.kde.org/do
 
 ## Status
 
-Early scaffolding. The repo currently contains:
+**v0.1 — core snapping works**, validated headlessly. The repo contains:
 
-- A **headless KWin 6 test environment** (Docker) so changes can be validated
+- A **headless KWin 6 test environment** (Docker) so changes are validated
   automatically on this machine.
-- A **skeleton KWin script** (`src/`) that proves the pipeline end-to-end: it
-  loads into KWin, enumerates windows, and repositions one.
+- A **KWin script** (`src/`) that snaps a window to a zone when you finish moving
+  it, with **overlapping zones** resolved by a smallest-zone-wins rule.
 
-Still to come: the zone data model, the visual zone editor, the drag-time snap
-overlay, multi-monitor support, and keyboard shortcuts.
+### How snapping works
+
+Zones are defined as percentages of the screen work area and **may overlap**. The
+default layout is a 3-column grid plus a centered `focus` zone that overlaps the
+middle column:
+
+```
+ZONES = [ left | middle | right ]  +  focus (centered, overlapping middle)
+```
+
+On `interactiveMoveResizeFinished`, the script reads `workspace.cursorPos`, finds
+every zone containing the cursor, and snaps the window to the **smallest** one — so
+a small zone stacked on a big one stays reachable. (This overlap behavior is the
+gap vs. KDE's built-in recursive-split tiling.)
+
+Still to come: a modifier gate so not *every* drag snaps, the **drag-time visual
+overlay**, a visual zone editor, layout persistence, multi-monitor handling, and
+keyboard shortcuts.
 
 ## Repo layout
 
 ```
 docker/
   Dockerfile          # ubuntu:25.04 + KWin 6 + Xvfb + xdotool + screenshot tools
-  entrypoint.sh       # dispatches: smoke | session | shell
+  entrypoint.sh       # dispatches: smoke | snap | test | session | shell
 scripts/
   build-image.sh      # docker build
   test.sh             # build (if needed) + run a harness command in the container
   harness/
     lib.sh            # fz_* helpers: start session, load script, drag, screenshot
     start-session.sh  # bring up Xvfb + kwin_x11 + load the mounted script
-    run-smoke-test.sh # end-to-end behavioral test
+    run-smoke-test.sh # quick check: session up + script loads cleanly
+    run-snap-test.sh  # behavioral: drag a window into the overlapping zone
 src/                  # the KWin script package (bind-mounted into the container)
   metadata.json
   contents/code/main.js
@@ -76,19 +93,26 @@ Build the image (first run pulls KWin + Qt6 + KF6, so it takes a few minutes):
 ./scripts/build-image.sh
 ```
 
-Run the smoke test (builds automatically if the image is missing):
+Run the tests (builds automatically if the image is missing):
 
 ```bash
-./scripts/test.sh
+./scripts/test.sh          # smoke + snap (default)
+./scripts/test.sh smoke    # just: session up + script loads cleanly
+./scripts/test.sh snap     # just: drag a window into the overlapping zone
 ```
 
 A pass looks like:
 
 ```
-SMOKE TEST PASSED — script loaded and repositioned the window (...)
+SMOKE TEST PASSED — KWin is up and the script loaded cleanly
+SNAP TEST PASSED — window snapped to the overlapping 'focus' zone (...)
 ```
 
-Logs and a screenshot land in `./out/` (`kwin.log`, `xvfb.log`, `smoke.png`).
+The snap test drags a window so the cursor finishes at screen center — a point
+inside both the `middle` column and the smaller `focus` zone — and asserts the
+window snapped to `focus`, proving overlap resolution.
+
+Logs and screenshots land in `./out/` (`kwin.log`, `xvfb.log`, `smoke.png`, `snap.png`).
 
 ### Iterating on the KWin script
 

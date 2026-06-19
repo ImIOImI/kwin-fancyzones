@@ -8,7 +8,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="${FZ_IMAGE:-kwin-fancyzones:dev}"
-CMD="${1:-smoke}"
+CMD="${1:-test}"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   "$REPO/scripts/build-image.sh"
