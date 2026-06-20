@@ -67,8 +67,9 @@ scenario() {
     echo "m 1040 600"; echo "s 150"     # dragging (no Shift yet)
     if [ "$shift" = "shift" ]; then
       echo "k 42 1"; echo "s 100"       # press Shift mid-drag
-      echo "m 1090 630"; echo "s 200"   # move => mouseChanged with Shift => gate activates
-      echo "m 1120 660"; echo "s 150"
+      echo "m 1090 630"; echo "s 200"   # move => mouseChanged with Shift => gate activates (overlay shown)
+      echo "m 1120 660"; echo "s 200"
+      echo "s 800"                       # hold (Shift down, overlay shown) so it renders + self-screenshots
       echo "k 42 0"; echo "s 100"       # release Shift before finishing
     else
       echo "m 1090 630"; echo "s 150"; echo "m 1120 660"; echo "s 150"
@@ -84,16 +85,20 @@ scenario /logs/scen-noshift.log ""
 echo "### scenario B: drag WITH Shift ###"
 scenario /logs/scen-shift.log shift
 
-echo "----- no-shift [fzeffect] -----"; grep "\[fzeffect\]" /logs/scen-noshift.log || true
-echo "----- shift    [fzeffect] -----"; grep "\[fzeffect\]" /logs/scen-shift.log || true
-echo "-------------------------------"
+echo "----- no-shift [fzeffect]/[overlay] -----"; grep -E "\[fzeffect\]|\[overlay\]" /logs/scen-noshift.log || true
+echo "----- shift    [fzeffect]/[overlay] -----"; grep -E "\[fzeffect\]|\[overlay\]" /logs/scen-shift.log || true
+echo "-----------------------------------------"
 
-# no-shift: a move happened but the overlay must NOT have shown.
+# no-shift: a move happened but the overlay must NOT have shown/rendered.
 grep -q "move start.*shift= false" /logs/scen-noshift.log || fail "no-shift: move not detected"
 grep -q "overlay SHOWN"            /logs/scen-noshift.log && fail "no-shift: overlay activated without Shift"
-# shift: a move happened, Shift pressed mid-drag activated the overlay, finish hid it.
+# shift: move happened, overlay activated AND the QML actually rendered, the drag
+# SURVIVED activation (move finish fired), and it deactivated on finish.
 grep -q "\[fzeffect\] move start"  /logs/scen-shift.log   || fail "shift: move not detected"
-grep -q "overlay SHOWN"            /logs/scen-shift.log   || fail "shift: overlay did not activate on mid-drag Shift"
+grep -q "overlay SHOWN"            /logs/scen-shift.log   || fail "shift: overlay did not activate"
+grep -q "\[overlay\] loaded"       /logs/scen-shift.log   || fail "shift: overlay QML did not render"
+grep -q "\[fzeffect\] move finish" /logs/scen-shift.log   || fail "shift: the drag was CANCELLED by the overlay (no move finish) -> switch to OffscreenQuickScene"
 grep -q "overlay hidden"           /logs/scen-shift.log   || fail "shift: overlay did not deactivate on finish"
+[ -f /logs/overlay.png ] && echo "overlay screenshot: /logs/overlay.png ($(stat -c%s /logs/overlay.png 2>/dev/null) bytes)" || echo "(no overlay.png captured)"
 
-echo "EFFECT TEST PASSED — move-hooked + Shift-gated activation (overlay shows only with Shift, hides on finish)"
+echo "EFFECT TEST PASSED — Shift-gated QML overlay renders during the drag and the drag survives"

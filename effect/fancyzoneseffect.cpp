@@ -4,15 +4,15 @@
 #include <effect/effectwindow.h>
 
 #include <QDebug>
+#include <QUrl>
 
 namespace KWin
 {
 
 FancyZonesEffect::FancyZonesEffect()
 {
-    // Track live keyboard-modifier state (connection-tracked in KWin 6). While a
-    // move is in progress, re-evaluate the gate so Shift can be pressed/released
-    // mid-drag.
+    setSource(QUrl(QStringLiteral("qrc:/fancyzones/overlay.qml")));
+
     connect(effects, &EffectsHandler::mouseChanged, this,
             [this](const QPointF &, const QPointF &, Qt::MouseButtons, Qt::MouseButtons,
                    Qt::KeyboardModifiers mods, Qt::KeyboardModifiers) {
@@ -51,7 +51,6 @@ void FancyZonesEffect::hookWindow(EffectWindow *w)
     });
 }
 
-// The gate: active iff a move is in progress AND Shift is held.
 void FancyZonesEffect::updateGate()
 {
     setActive(m_movingWindow != nullptr && (m_mods & Qt::ShiftModifier));
@@ -64,12 +63,12 @@ void FancyZonesEffect::setActive(bool active)
     }
     m_active = active;
     qInfo().noquote() << "[fzeffect] overlay" << (m_active ? "SHOWN" : "hidden");
-    // TODO(v0.5): show/hide the QuickSceneEffect zone overlay here.
+    setRunning(m_active);
 }
 
 bool FancyZonesEffect::supported()
 {
-    return true;
+    return effects->isOpenGLCompositing();
 }
 
 KWIN_EFFECT_FACTORY(FancyZonesEffect, "metadata.json")

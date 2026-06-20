@@ -19,10 +19,19 @@ find_package(KWin REQUIRED)
 
 add_library(fancyzones MODULE fancyzoneseffect.cpp)
 set_target_properties(fancyzones PROPERTIES PREFIX "")
+
+# Embed the overlay QML so the plugin is self-contained (setSource qrc:/fancyzones/overlay.qml).
+qt6_add_resources(fancyzones "fancyzones_qml"
+    PREFIX "/fancyzones"
+    BASE contents/ui
+    FILES contents/ui/overlay.qml)
+
 target_link_libraries(fancyzones
     KWin::kwin
     Qt6::Core
     Qt6::Gui
+    Qt6::Quick
+    Qt6::Qml
     KF6::CoreAddons
 )
 

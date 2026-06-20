@@ -1,18 +1,18 @@
 #pragma once
 // kwin-fancyzones — C++ KWin effect.
 //
-// v0.4: move-hooked, Shift-gated activation. While a window is being interactively
-// moved AND Shift is held, the effect "activates" (where the zone overlay will be
-// shown). Releasing Shift mid-drag deactivates; finishing the move deactivates.
-// The visual overlay (QuickSceneEffect QML) and snapping land next; for now
-// activation is observable via logs and exercised by the headless harness.
-#include <effect/effect.h>
+// v0.5: render the zone overlay via QuickSceneEffect (QML), shown while a window is
+// being moved with Shift held. Verified headless: activating the effect mid-move does
+// NOT cancel the drag (move-finish still fires), so QuickSceneEffect is viable as the
+// drag overlay (much simpler than OffscreenQuickScene + manual paintScreen).
+// TODO: confirm the input/grab interaction on real Kubuntu hardware.
+#include <effect/quickeffect.h>
 
 namespace KWin
 {
 class EffectWindow;
 
-class FancyZonesEffect : public Effect
+class FancyZonesEffect : public QuickSceneEffect
 {
     Q_OBJECT
 public:
@@ -20,7 +20,7 @@ public:
     ~FancyZonesEffect() override;
 
     static bool supported();
-    int requestedEffectChainPosition() const override { return 10; }
+    int requestedEffectChainPosition() const override { return 60; }
 
 private:
     void hookWindow(EffectWindow *w);
