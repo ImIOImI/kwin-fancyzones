@@ -120,6 +120,23 @@ FZ_IMAGE=ghcr.io/imioimi/kwin-fancyzones-test:latest ./scripts/test-effect.sh
 Or build it locally: `./scripts/build-effect-image.sh` (→ `kwin-fancyzones-test:dev`,
 the default for `test-effect.sh`).
 
+## Try it visually (WSL2 / WSLg, or any Wayland session)
+
+To actually *see and use* the effect — not just the headless test — run a **nested
+KWin** in a window on your desktop with the effect loaded:
+
+```bash
+./scripts/run-visual.sh
+```
+
+A ~1600×900 KWin window opens (via WSLg on Windows 11 WSL2). Inside it are a couple
+of test terminals — **hold Shift and drag one** to see the zone overlay, release to
+snap. Close the window or press Ctrl-C to stop.
+
+Requires a Wayland session (`WAYLAND_DISPLAY` set; WSLg provides this). The container
+is privileged and mounts the WSLg wayland socket; it uses the GPU (`/dev/dxg`) if
+present, otherwise software GL.
+
 ## Repo layout
 
 ```
