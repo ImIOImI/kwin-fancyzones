@@ -40,6 +40,8 @@ export XDG_RUNTIME_DIR=/tmp/xdgrt; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 eval "$(dbus-launch --sh-syntax)"; export DBUS_SESSION_BUS_ADDRESS
 export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=O WAYLAND_DISPLAY=wayland-0
+export FZ_CAPTURE=/logs/overlay.png   # the effect saves the overlay's render here when active
+rm -f /logs/overlay.png
 
 # Run one drag scenario in a fresh kwin_wayland session. $1=logfile, $2="shift"|"".
 scenario() {
@@ -105,5 +107,9 @@ grep -q "\[fzeffect\] move finish" /logs/scen-shift.log   || fail "shift: the dr
 grep -q "\[fzeffect\] snapped to left" /logs/scen-shift.log || fail "shift: did not snap to the left zone"
 grep -q "640x1080"                 /logs/scen-shift.log   || fail "shift: snap geometry is not the left zone (expected 640x1080)"
 grep -q "overlay hidden"           /logs/scen-shift.log   || fail "shift: overlay did not deactivate on finish"
+# the passive OffscreenQuickScene overlay actually rendered (captured to a PNG).
+grep -q "\[fzeffect\] captured overlay" /logs/scen-shift.log || fail "shift: overlay did not render (no capture)"
+[ -s /logs/overlay.png ] || fail "shift: overlay.png not written"
+echo "overlay rendered -> /logs/overlay.png ($(stat -c%s /logs/overlay.png) bytes)"
 
 echo "EFFECT TEST PASSED — Shift-gated overlay highlights the cursor's zone and snaps the window to it on drop"

@@ -1,26 +1,26 @@
 #pragma once
 // kwin-fancyzones — C++ KWin effect.
 //
-// v0.5 logic: while a window is moved with Shift held, select the zone under the
-// cursor live (nearest-center among overlapping zones) and snap the window to it on
-// drop. Uses a plain Effect so mouseChanged keeps firing during the move (KWin's
-// move grab + a QuickSceneEffect mouse-interception conflict — interception buffers
-// motion until the overlay closes, which breaks live tracking). The passive visual
-// overlay (OffscreenQuickScene + paintScreen) is the next step; this step is the
-// fully headless-testable selection + snap behavior.
-//
-// Snapping uses EffectWindow::window()->moveResize() — an internal KWin API (the only
-// way an effect can resize a window). TODO: couples to KWin's internal ABI.
+// v0.6: the full drag experience. While a window is moved with Shift held, render a
+// PASSIVE zone overlay (OffscreenQuickScene blitted in paintScreen — no input
+// interception, so mouseChanged keeps tracking the cursor during the move), highlight
+// the zone under the cursor live (nearest-center among overlapping zones), and on drop
+// snap the window to it via EffectWindow::window()->moveResize() (internal KWin API).
 #include <effect/effect.h>
 
 #include <QList>
 #include <QPointF>
 #include <QRectF>
 #include <QString>
+#include <memory>
 
 namespace KWin
 {
 class EffectWindow;
+class OffscreenQuickScene;
+class RenderTarget;
+class RenderViewport;
+class Output;
 
 class FancyZonesEffect : public Effect
 {
@@ -31,6 +31,10 @@ public:
 
     int requestedEffectChainPosition() const override { return 60; }
 
+protected:
+    void paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+                     int mask, const QRegion &region, Output *screen) override;
+
 private:
     struct Zone { QString name; double x, y, w, h; }; // percentages of the screen
 
@@ -38,6 +42,8 @@ private:
     void updateGate();
     void setActive(bool active);
     void updateHighlight();
+    void ensureOverlay();
+    void pushHighlight(int idx);
     QRectF rectFor(const Zone &z) const;
     int pick(const QPointF &cursor) const; // nearest-center among zones containing cursor; -1 if none
 
@@ -47,6 +53,8 @@ private:
     bool m_active = false;
     int m_highlight = -1;
     QPointF m_cursor;
+    std::unique_ptr<OffscreenQuickScene> m_overlay;
+    bool m_captured = false;
 };
 
 } // namespace KWin

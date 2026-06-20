@@ -2,9 +2,21 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <effect/offscreenquickview.h>
 #include <window.h> // KWin::Window::moveResize (internal)
 
+#include <core/renderviewport.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
+#include <opengl/gltexture.h>
+
+#include <QQuickItem>
+#include <QImage>
+#include <QMatrix4x4>
 #include <QDebug>
+#include <QUrl>
+
+#include <epoxy/gl.h>
 
 namespace KWin
 {
@@ -70,6 +82,26 @@ int FancyZonesEffect::pick(const QPointF &c) const
     return best;
 }
 
+void FancyZonesEffect::ensureOverlay()
+{
+    if (!m_overlay) {
+        m_overlay = std::make_unique<OffscreenQuickScene>(OffscreenQuickView::ExportMode::Image, true);
+        m_overlay->setSource(QUrl(QStringLiteral("qrc:/fancyzones/overlay.qml")));
+        connect(m_overlay.get(), &OffscreenQuickView::repaintNeeded, this, []() { effects->addRepaintFull(); });
+    }
+    m_overlay->setGeometry(effects->virtualScreenGeometry());
+    m_overlay->show();
+}
+
+void FancyZonesEffect::pushHighlight(int idx)
+{
+    if (m_overlay && m_overlay->rootItem()) {
+        m_overlay->rootItem()->setProperty("highlighted", idx);
+        m_overlay->update();
+        effects->addRepaintFull();
+    }
+}
+
 void FancyZonesEffect::updateHighlight()
 {
     const int idx = pick(m_cursor);
@@ -77,6 +109,7 @@ void FancyZonesEffect::updateHighlight()
         m_highlight = idx;
         qInfo().noquote() << "[fzeffect] highlight" << (idx >= 0 ? m_zones[idx].name : QStringLiteral("none"));
     }
+    pushHighlight(idx);
 }
 
 void FancyZonesEffect::updateGate()
@@ -92,10 +125,13 @@ void FancyZonesEffect::setActive(bool active)
     m_active = active;
     qInfo().noquote() << "[fzeffect] overlay" << (active ? "SHOWN" : "hidden");
     if (active) {
+        m_captured = false;
+        ensureOverlay();
         updateHighlight();
     } else {
         m_highlight = -1;
     }
+    effects->addRepaintFull();
 }
 
 void FancyZonesEffect::hookWindow(EffectWindow *w)
@@ -122,6 +158,49 @@ void FancyZonesEffect::hookWindow(EffectWindow *w)
         m_movingWindow = nullptr;
         setActive(false);
     });
+}
+
+void FancyZonesEffect::paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
+                                   int mask, const QRegion &region, Output *screen)
+{
+    effects->paintScreen(renderTarget, viewport, mask, region, screen);
+
+    if (!m_active || !m_overlay) {
+        return;
+    }
+    m_overlay->update(); // render the QML now (GL context is current here)
+    const QImage img = m_overlay->bufferAsImage();
+    if (img.isNull()) {
+        return;
+    }
+
+    // Capture the overlay render for headless verification (set FZ_CAPTURE=path).
+    if (!m_captured) {
+        m_captured = true;
+        const QByteArray path = qgetenv("FZ_CAPTURE");
+        if (!path.isEmpty()) {
+            if (img.save(QString::fromLocal8Bit(path))) {
+                qInfo().noquote() << "[fzeffect] captured overlay" << img.size() << "->" << QString::fromLocal8Bit(path);
+            } else {
+                qInfo() << "[fzeffect] overlay capture failed";
+            }
+        }
+    }
+
+    // Blit the overlay over the screen (premultiplied alpha). Upload the rendered image
+    // to a texture so this works under both software GL (headless) and real GPUs.
+    std::unique_ptr<GLTexture> tex = GLTexture::upload(img);
+    if (!tex) {
+        return;
+    }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    ShaderBinder binder(ShaderTrait::MapTexture | ShaderTrait::Modulate);
+    binder.shader()->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+    tex->bind();
+    tex->render(QSizeF(m_overlay->geometry().size()));
+    tex->unbind();
+    glDisable(GL_BLEND);
 }
 
 KWIN_EFFECT_FACTORY(FancyZonesEffect, "metadata.json")
