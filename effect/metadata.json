@@ -1,6 +1,5 @@
 {
     "KPlugin": {
-        "Id": "fancyzones",
         "Name": "KWin FancyZones",
         "Description": "FancyZones-style window snapping with overlapping zones",
         "EnabledByDefault": false

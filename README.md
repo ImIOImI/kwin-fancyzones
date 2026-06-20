@@ -59,9 +59,11 @@ The project deliberately has two parallel tracks:
 
 - **`effect/` — C++ KWin effect** (the path to the **exact** FancyZones drag
   experience). An effect runs inside the compositor and *can* read live
-  pointer + modifier state mid-drag (which the script can't). v0.3 is a proven
-  foundation: it builds against `kwin-dev`, loads into a headless `kwin_wayland`
-  session, and reads the Shift modifier live during injected input.
+  pointer + modifier state mid-drag (which the script can't). v0.4: it hooks
+  per-window interactive moves and **gates activation on live Shift state** —
+  dragging without Shift does nothing; pressing Shift mid-drag activates (where the
+  zone overlay will show); finishing the move deactivates. Overlay visuals + snapping
+  land next.
 
 ### Testing the effect
 
@@ -69,15 +71,19 @@ The effect needs a real compositor, so it can't use the X11/Xvfb harness. Instea
 `scripts/test-effect.sh` runs a **privileged** container that:
 
 ```
-kwin_wayland --virtual          ← software-composited headless session
+kwin_wayland --virtual --xwayland   ← software-composited headless session + a test window
   └─ effect/ built via CMake, loaded via the Effects D-Bus interface
-scripts/harness-wayland/fakeinput.c  ← injects pointer + keyboard via the
-                                       org_kde_kwin_fake_input Wayland protocol
+scripts/harness-wayland/fakeinput.c ← injects pointer + keyboard via the
+                                      org_kde_kwin_fake_input Wayland protocol
 ```
+
+It runs two scenarios (each in a fresh session): drag a window **without** Shift
+(must not activate) and drag while pressing **Shift** mid-drag (must activate, then
+deactivate on finish).
 
 ```bash
 ./scripts/test-effect.sh
-# => EFFECT TEST PASSED — C++ effect loaded headless and read the Shift modifier live
+# => EFFECT TEST PASSED — move-hooked + Shift-gated activation ...
 ```
 
 ## Testing image

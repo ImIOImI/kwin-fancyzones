@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
-# In-container: build the C++ KWin effect + the fake_input client, load the effect
-# into a headless kwin_wayland session, inject a Shift+pointer sequence, and assert
-# the effect observed the Shift modifier LIVE — the capability a KWin script lacks.
+# In-container: build the C++ effect + fake_input client, then verify the effect's
+# move-hooked, Shift-gated activation by actually moving a real (Xwayland) window:
+#   - drag WITHOUT Shift -> effect must NOT activate the overlay
+#   - drag WITH Shift     -> effect activates, then deactivates when the move ends
 #
-# Must run in a PRIVILEGED container: kwin_wayland needs elevated caps, and KWin only
-# advertises the privileged fake_input protocol with KWIN_WAYLAND_NO_PERMISSION_CHECKS.
+# Each scenario runs in a FRESH kwin_wayland session (window at a known position),
+# so there's no cross-scenario input/window state to confuse the result.
 #
-# Expects mounts: /opt/effect (repo effect/), /opt/hw (this dir), /logs (output).
+# Must run PRIVILEGED; KWIN_WAYLAND_NO_PERMISSION_CHECKS exposes fake_input.
+# Mounts: /opt/effect, /opt/hw (this dir), /logs.
 set -uo pipefail
 fail() { echo "EFFECT TEST FAILED: $*" >&2; exit 1; }
 
-if ! command -v kwin_wayland >/dev/null || ! command -v cmake >/dev/null || ! command -v wayland-scanner >/dev/null; then
-  echo "### installing build + wayland deps (first run is slow) ###"
+if ! command -v kwin_wayland >/dev/null || ! command -v cmake >/dev/null || ! command -v Xwayland >/dev/null; then
+  echo "### installing build + wayland deps (first run on a non-baked image is slow) ###"
   apt-get update -qq >/dev/null 2>&1
   apt-get install -y -qq --no-install-recommends \
     cmake extra-cmake-modules g++ make \
     kwin-dev qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
     libkf6coreaddons-dev libxkbcommon-dev \
-    kwin-wayland libegl1 libegl-mesa0 libgles2 \
+    kwin-wayland xwayland xterm xfonts-base x11-utils libegl1 libegl-mesa0 libgles2 \
     libwayland-dev libwayland-bin plasma-wayland-protocols >/dev/null 2>&1
 fi
 
@@ -32,32 +34,66 @@ echo "### build + install the effect ###"
 cmake -S /opt/effect -B /work/build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release >/work/cmake.log 2>&1 || { tail -20 /work/cmake.log; fail "cmake config"; }
 cmake --build /work/build -j"$(nproc)" >/work/make.log 2>&1 || { tail -30 /work/make.log; fail "compile"; }
 QTP=$(qtpaths6 --plugin-dir 2>/dev/null || echo /usr/lib/x86_64-linux-gnu/qt6/plugins)
-mkdir -p "$QTP/kwin/effects/plugins"
-cp /work/build/fancyzones.so "$QTP/kwin/effects/plugins/" || fail "install plugin"
-echo "installed to $QTP/kwin/effects/plugins/"
+mkdir -p "$QTP/kwin/effects/plugins"; cp /work/build/fancyzones.so "$QTP/kwin/effects/plugins/" || fail "install plugin"
 
-echo "### headless kwin_wayland + load effect + inject input ###"
 export XDG_RUNTIME_DIR=/tmp/xdgrt; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 eval "$(dbus-launch --sh-syntax)"; export DBUS_SESSION_BUS_ADDRESS
-# Software compositing + expose the privileged fake_input protocol.
 export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=O WAYLAND_DISPLAY=wayland-0
-kwin_wayland --virtual --width 1920 --height 1080 --no-lockscreen >/logs/kww.log 2>&1 &
-for _ in $(seq 1 80); do gdbus introspect --session --dest org.kde.KWin --object-path /KWin >/dev/null 2>&1 && break; sleep 0.3; done
-gdbus introspect --session --dest org.kde.KWin --object-path /KWin >/dev/null 2>&1 || { tail -20 /logs/kww.log; fail "kwin_wayland did not start"; }
-sleep 1
 
-loaded=$(gdbus call --session --dest org.kde.KWin --object-path /Effects --method org.kde.kwin.Effects.loadEffect fancyzones 2>&1)
-echo "loadEffect fancyzones -> $loaded"
-[ "$loaded" = "(true,)" ] || fail "effect did not load (see /logs/kww.log)"
-sleep 1
+# Run one drag scenario in a fresh kwin_wayland session. $1=logfile, $2="shift"|"".
+scenario() {
+  local logf="$1" shift="${2:-}"
+  rm -f "$XDG_RUNTIME_DIR"/wayland-0* 2>/dev/null
+  kwin_wayland --virtual --width 1920 --height 1080 --xwayland --no-lockscreen /opt/hw/session.sh >"$logf" 2>&1 &
+  local kpid=$!
+  local _; for _ in $(seq 1 80); do gdbus introspect --session --dest org.kde.KWin --object-path /KWin >/dev/null 2>&1 && break; sleep 0.3; done
+  gdbus introspect --session --dest org.kde.KWin --object-path /KWin >/dev/null 2>&1 || { kill $kpid 2>/dev/null; fail "kwin_wayland did not start"; }
+  local loaded; loaded=$(gdbus call --session --dest org.kde.KWin --object-path /Effects --method org.kde.kwin.Effects.loadEffect fancyzones 2>&1)
+  [ "$loaded" = "(true,)" ] || { kill $kpid 2>/dev/null; fail "effect did not load ($loaded)"; }
+  gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.loadDeclarativeScript /opt/hw/setup/contents/ui/main.qml fzsetup >/dev/null 2>&1
+  gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.start >/dev/null 2>&1
+  for _ in $(seq 1 60); do grep -q "\[setup\] positioned" "$logf" && break; sleep 0.3; done
+  grep -q "\[setup\] positioned" "$logf" || { kill $kpid 2>/dev/null; fail "test window never appeared/positioned"; }
 
-# Hold Shift, move the pointer, release Shift, move again. (evdev: 42=LEFTSHIFT)
-printf 'k 42 1\ns 200\nm 500 500\ns 200\nm 900 700\ns 200\nk 42 0\ns 200\nm 600 600\ns 200\nq\n' | ./fakeinput >/dev/null 2>&1
-sleep 1
+  # evdev: Meta=125 (move modifier), Shift=42, LeftButton=272. Window is 100,100 1700x880; 950,540 is inside.
+  # Headless windows have no titlebar to drag, so start the move with Meta+Left (the
+  # move binding is exactly Meta, so Shift can't be held at start). For the Shift
+  # scenario, press Shift MID-drag — the effect re-evaluates the gate on the next
+  # mouseChanged, which is the live "Shift while dragging" behavior.
+  { echo "k 125 1"; echo "s 150"
+    echo "m 950 540"; echo "s 150"
+    echo "b 272 1"; echo "s 200"        # Meta+Left => start interactive move
+    echo "m 1040 600"; echo "s 150"     # dragging (no Shift yet)
+    if [ "$shift" = "shift" ]; then
+      echo "k 42 1"; echo "s 100"       # press Shift mid-drag
+      echo "m 1090 630"; echo "s 200"   # move => mouseChanged with Shift => gate activates
+      echo "m 1120 660"; echo "s 150"
+      echo "k 42 0"; echo "s 100"       # release Shift before finishing
+    else
+      echo "m 1090 630"; echo "s 150"; echo "m 1120 660"; echo "s 150"
+    fi
+    echo "b 272 0"; echo "s 150"        # release => finish move
+    echo "k 125 0"; echo "s 200"; echo "q"; } | ./fakeinput >/dev/null 2>&1
+  sleep 0.8
+  kill $kpid 2>/dev/null; pkill -f kwin_wayland 2>/dev/null; pkill -x xterm 2>/dev/null; sleep 1
+}
 
-echo "----- [fzeffect] log -----"
-grep "\[fzeffect\]" /logs/kww.log | tail -8 || echo "(none)"
-echo "--------------------------"
-grep -q "shift= true" /logs/kww.log || fail "effect never observed the Shift modifier"
+echo "### scenario A: drag WITHOUT Shift ###"
+scenario /logs/scen-noshift.log ""
+echo "### scenario B: drag WITH Shift ###"
+scenario /logs/scen-shift.log shift
 
-echo "EFFECT TEST PASSED — C++ effect loaded headless and read the Shift modifier live"
+echo "----- no-shift [fzeffect] -----"; grep "\[fzeffect\]" /logs/scen-noshift.log || true
+echo "----- shift    [fzeffect] -----"; grep "\[fzeffect\]" /logs/scen-shift.log || true
+echo "-------------------------------"
+
+# no-shift: a move happened but the overlay must NOT have shown.
+grep -q "move start.*shift= false" /logs/scen-noshift.log || fail "no-shift: move not detected"
+grep -q "overlay SHOWN"            /logs/scen-noshift.log && fail "no-shift: overlay activated without Shift"
+# shift: a move happened, Shift pressed mid-drag activated the overlay, finish hid it.
+grep -q "\[fzeffect\] move start"  /logs/scen-shift.log   || fail "shift: move not detected"
+grep -q "overlay SHOWN"            /logs/scen-shift.log   || fail "shift: overlay did not activate on mid-drag Shift"
+grep -q "overlay hidden"           /logs/scen-shift.log   || fail "shift: overlay did not deactivate on finish"
+
+echo "EFFECT TEST PASSED — move-hooked + Shift-gated activation (overlay shows only with Shift, hides on finish)"

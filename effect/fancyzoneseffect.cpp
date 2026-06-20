@@ -8,32 +8,21 @@
 namespace KWin
 {
 
-static void hookWindow(EffectWindow *w)
-{
-    if (!w) {
-        return;
-    }
-    QObject::connect(w, &EffectWindow::windowStartUserMovedResized, effects, [](EffectWindow *win) {
-        qInfo() << "[fzeffect] MOVE START" << win->caption();
-    });
-    QObject::connect(w, &EffectWindow::windowFinishUserMovedResized, effects, [](EffectWindow *win) {
-        qInfo() << "[fzeffect] MOVE FINISH" << win->caption();
-    });
-}
-
 FancyZonesEffect::FancyZonesEffect()
 {
-    // The capability scripts lack: live pointer + keyboard-modifier state.
-    // mouseChanged is connection-tracked in KWin 6 — connecting enables delivery.
+    // Track live keyboard-modifier state (connection-tracked in KWin 6). While a
+    // move is in progress, re-evaluate the gate so Shift can be pressed/released
+    // mid-drag.
     connect(effects, &EffectsHandler::mouseChanged, this,
-            [](const QPointF &pos, const QPointF &, Qt::MouseButtons buttons, Qt::MouseButtons,
-               Qt::KeyboardModifiers mods, Qt::KeyboardModifiers) {
-                qInfo().noquote() << "[fzeffect] mouseChanged pos=" << pos.x() << "," << pos.y()
-                                  << "buttons=" << int(buttons) << "mods=" << int(mods)
-                                  << "shift=" << bool(mods & Qt::ShiftModifier);
+            [this](const QPointF &, const QPointF &, Qt::MouseButtons, Qt::MouseButtons,
+                   Qt::KeyboardModifiers mods, Qt::KeyboardModifiers) {
+                m_mods = mods;
+                if (m_movingWindow) {
+                    updateGate();
+                }
             });
 
-    connect(effects, &EffectsHandler::windowAdded, this, [](EffectWindow *w) { hookWindow(w); });
+    connect(effects, &EffectsHandler::windowAdded, this, [this](EffectWindow *w) { hookWindow(w); });
     const auto windows = effects->stackingOrder();
     for (EffectWindow *w : windows) {
         hookWindow(w);
@@ -43,6 +32,40 @@ FancyZonesEffect::FancyZonesEffect()
 }
 
 FancyZonesEffect::~FancyZonesEffect() = default;
+
+void FancyZonesEffect::hookWindow(EffectWindow *w)
+{
+    if (!w) {
+        return;
+    }
+    connect(w, &EffectWindow::windowStartUserMovedResized, this, [this](EffectWindow *win) {
+        m_movingWindow = win;
+        qInfo().noquote() << "[fzeffect] move start" << win->caption()
+                          << "shift=" << bool(m_mods & Qt::ShiftModifier);
+        updateGate();
+    });
+    connect(w, &EffectWindow::windowFinishUserMovedResized, this, [this](EffectWindow *win) {
+        qInfo().noquote() << "[fzeffect] move finish" << win->caption();
+        m_movingWindow = nullptr;
+        setActive(false);
+    });
+}
+
+// The gate: active iff a move is in progress AND Shift is held.
+void FancyZonesEffect::updateGate()
+{
+    setActive(m_movingWindow != nullptr && (m_mods & Qt::ShiftModifier));
+}
+
+void FancyZonesEffect::setActive(bool active)
+{
+    if (active == m_active) {
+        return;
+    }
+    m_active = active;
+    qInfo().noquote() << "[fzeffect] overlay" << (m_active ? "SHOWN" : "hidden");
+    // TODO(v0.5): show/hide the QuickSceneEffect zone overlay here.
+}
 
 bool FancyZonesEffect::supported()
 {

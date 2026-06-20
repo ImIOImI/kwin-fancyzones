@@ -21,7 +21,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       # --- window managers under test ---
-      kwin-x11 kwin-common kwin-wayland \
+      kwin-x11 kwin-common kwin-wayland xwayland \
       # --- X11 headless stack + input/screenshot tooling ---
       xvfb x11-utils x11-xserver-utils x11-apps xdotool wmctrl xterm xfonts-base \
       imagemagick dbus-x11 libglib2.0-bin \
