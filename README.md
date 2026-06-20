@@ -59,11 +59,17 @@ The project deliberately has two parallel tracks:
 
 - **`effect/` — C++ KWin effect** (the path to the **exact** FancyZones drag
   experience). An effect runs inside the compositor and *can* read live
-  pointer + modifier state mid-drag (which the script can't). v0.5: it hooks
-  per-window interactive moves, **gates on live Shift state**, and renders the **zone
-  overlay** (QML via `QuickSceneEffect`) while you drag with Shift — without
-  cancelling the drag. Drag without Shift → nothing; press Shift mid-drag → the zone
-  overlay appears; finish → it hides. Live highlight + snapping land next.
+  pointer + modifier state mid-drag (which the script can't). v0.5: while you drag
+  a window with **Shift** held, it selects the zone under the cursor **live**
+  (nearest-center among overlapping zones) and **snaps** the window to it on drop —
+  using `EffectWindow::window()->moveResize()`. Drag without Shift → nothing.
+  Verified headless: the highlight follows the cursor (`middle`→`left`) and the
+  window snaps to the correct zone (`0,0 640x1080`).
+
+  The on-screen **zone overlay** is the next step: it must be a *passive*
+  `OffscreenQuickScene` painted in `paintScreen` — `QuickSceneEffect` was tried but
+  its mouse interception conflicts with KWin's move grab (it buffers cursor motion
+  until the overlay closes, breaking live tracking).
 
 ### Testing the effect
 

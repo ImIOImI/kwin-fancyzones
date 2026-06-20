@@ -61,20 +61,24 @@ scenario() {
   # move binding is exactly Meta, so Shift can't be held at start). For the Shift
   # scenario, press Shift MID-drag — the effect re-evaluates the gate on the next
   # mouseChanged, which is the live "Shift while dragging" behavior.
+  # Drag toward the LEFT zone (drop cursor at 300,540 — inside "left" only). For the
+  # Shift scenario, press Shift mid-drag and keep it held THROUGH the finish so the
+  # snap fires; expect highlight "left" and a snap to the left zone (0,0 640x1080).
   { echo "k 125 1"; echo "s 150"
     echo "m 950 540"; echo "s 150"
     echo "b 272 1"; echo "s 200"        # Meta+Left => start interactive move
-    echo "m 1040 600"; echo "s 150"     # dragging (no Shift yet)
+    echo "m 700 540"; echo "s 150"      # dragging (no Shift yet)
     if [ "$shift" = "shift" ]; then
-      echo "k 42 1"; echo "s 100"       # press Shift mid-drag
-      echo "m 1090 630"; echo "s 200"   # move => mouseChanged with Shift => gate activates (overlay shown)
-      echo "m 1120 660"; echo "s 200"
-      echo "s 800"                       # hold (Shift down, overlay shown) so it renders + self-screenshots
-      echo "k 42 0"; echo "s 100"       # release Shift before finishing
+      echo "k 42 1"; echo "s 100"       # press Shift mid-drag => gate activates (overlay shown)
+      echo "m 500 540"; echo "s 200"
+      echo "m 300 540"; echo "s 200"    # cursor now inside the LEFT zone => highlight "left"
+      echo "s 500"                       # hold so the overlay renders + highlight settles
+      echo "b 272 0"; echo "s 200"      # finish WITH Shift held => snap to left
+      echo "k 42 0"; echo "s 100"
     else
-      echo "m 1090 630"; echo "s 150"; echo "m 1120 660"; echo "s 150"
+      echo "m 500 540"; echo "s 150"; echo "m 300 540"; echo "s 150"
+      echo "b 272 0"; echo "s 150"      # finish, no snap
     fi
-    echo "b 272 0"; echo "s 150"        # release => finish move
     echo "k 125 0"; echo "s 200"; echo "q"; } | ./fakeinput >/dev/null 2>&1
   sleep 0.8
   kill $kpid 2>/dev/null; pkill -f kwin_wayland 2>/dev/null; pkill -x xterm 2>/dev/null; sleep 1
@@ -89,16 +93,17 @@ echo "----- no-shift [fzeffect]/[overlay] -----"; grep -E "\[fzeffect\]|\[overla
 echo "----- shift    [fzeffect]/[overlay] -----"; grep -E "\[fzeffect\]|\[overlay\]" /logs/scen-shift.log || true
 echo "-----------------------------------------"
 
-# no-shift: a move happened but the overlay must NOT have shown/rendered.
+# no-shift: a move happened but the overlay must NOT have shown, and NO snap.
 grep -q "move start.*shift= false" /logs/scen-noshift.log || fail "no-shift: move not detected"
 grep -q "overlay SHOWN"            /logs/scen-noshift.log && fail "no-shift: overlay activated without Shift"
-# shift: move happened, overlay activated AND the QML actually rendered, the drag
-# SURVIVED activation (move finish fired), and it deactivated on finish.
-grep -q "\[fzeffect\] move start"  /logs/scen-shift.log   || fail "shift: move not detected"
+grep -q "\[fzeffect\] snapped"     /logs/scen-noshift.log && fail "no-shift: window snapped without Shift"
+# shift: overlay rendered, highlighted the LEFT zone, the drag survived, snapped the
+# window to the left zone (0,0 640x1080), and the overlay hid on finish.
 grep -q "overlay SHOWN"            /logs/scen-shift.log   || fail "shift: overlay did not activate"
-grep -q "\[overlay\] loaded"       /logs/scen-shift.log   || fail "shift: overlay QML did not render"
-grep -q "\[fzeffect\] move finish" /logs/scen-shift.log   || fail "shift: the drag was CANCELLED by the overlay (no move finish) -> switch to OffscreenQuickScene"
+grep -q "\[fzeffect\] highlight left" /logs/scen-shift.log || fail "shift: did not highlight the left zone under the cursor"
+grep -q "\[fzeffect\] move finish" /logs/scen-shift.log   || fail "shift: the drag was CANCELLED by the overlay (no move finish)"
+grep -q "\[fzeffect\] snapped to left" /logs/scen-shift.log || fail "shift: did not snap to the left zone"
+grep -q "640x1080"                 /logs/scen-shift.log   || fail "shift: snap geometry is not the left zone (expected 640x1080)"
 grep -q "overlay hidden"           /logs/scen-shift.log   || fail "shift: overlay did not deactivate on finish"
-[ -f /logs/overlay.png ] && echo "overlay screenshot: /logs/overlay.png ($(stat -c%s /logs/overlay.png 2>/dev/null) bytes)" || echo "(no overlay.png captured)"
 
-echo "EFFECT TEST PASSED — Shift-gated QML overlay renders during the drag and the drag survives"
+echo "EFFECT TEST PASSED — Shift-gated overlay highlights the cursor's zone and snaps the window to it on drop"
