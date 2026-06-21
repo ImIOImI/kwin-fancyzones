@@ -8,3 +8,6 @@ out/
 *.swp
 .idea/
 .vscode/
+
+# Local build dir (install.sh)
+build/

@@ -137,6 +137,26 @@ Requires a Wayland session (`WAYLAND_DISPLAY` set; WSLg provides this). The cont
 is privileged and mounts the WSLg wayland socket; it uses the GPU (`/dev/dxg`) if
 present, otherwise software GL.
 
+> **Note:** under WSLg, a nested KWin only gets *software (QPainter)* compositing,
+> which WSLg may present as a black window even though the effect is running
+> correctly (windows map, compositing active). To actually *see* it, use a real
+> Plasma 6 session — see below.
+
+## Install on a real Kubuntu (Plasma 6)
+
+The reliable way to use it for real. **Requires Plasma 6 / KWin 6 — Kubuntu 24.10+ or
+25.04** (not 24.04 LTS, which is still Plasma 5). On that machine:
+
+```bash
+git clone https://github.com/ImIOImI/kwin-fancyzones
+cd kwin-fancyzones
+./scripts/install.sh
+```
+
+It installs build deps, compiles the effect, installs `fancyzones.so` to the Qt6
+plugin dir, and enables it in `kwinrc`. Log out/in (or `kwin_wayland --replace`) to
+activate, then **drag a window with Shift held** to snap it to a zone.
+
 ## Repo layout
 
 ```
