@@ -1,13 +1,13 @@
 // kwin-fancyzones overlay (rendered by the C++ effect).
-// Both `zones` (the layout, from the config) and `highlighted` (the active zone index)
-// are pushed from C++, so the config file is the single source of truth.
+// Both `zones` (the layout, from the config) and `highlighted` (the selected zone
+// indices) are pushed from C++, so the config file is the single source of truth.
 import QtQuick
 
 Item {
     id: root
     // QuickSceneView sizes this root item to the screen.
 
-    property int highlighted: -1   // nearest-center zone under the cursor; -1 = none
+    property var highlighted: []    // indices of the selected zone(s) (span); set by C++
     property var zones: []          // [{name,x,y,w,h}, …] in percent; set by the effect
 
     Repeater {
@@ -15,7 +15,7 @@ Item {
         Rectangle {
             required property int index
             required property var modelData
-            readonly property bool hot: index === root.highlighted
+            readonly property bool hot: root.highlighted.indexOf(index) >= 0
 
             x: Math.round(modelData.x / 100 * root.width)
             y: Math.round(modelData.y / 100 * root.height)

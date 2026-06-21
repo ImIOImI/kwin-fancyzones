@@ -59,11 +59,12 @@ The project deliberately has two parallel tracks:
 
 - **`effect/` — C++ KWin effect** (the path to the **exact** FancyZones drag
   experience). An effect runs inside the compositor and *can* read live
-  pointer + modifier state mid-drag (which the script can't). **v0.6 — the full
-  drag experience:** while you drag a window with **Shift** held, a translucent
-  **zone overlay** appears, the zone under the cursor **highlights live**
-  (nearest-center among overlapping zones), and on drop the window **snaps** to it.
-  Drag without Shift → nothing.
+  pointer + modifier state mid-drag (which the script can't). **The full drag
+  experience:** while you drag a window with **Shift** held, a translucent **zone
+  overlay** appears, the zone under the cursor **highlights live** (nearest-center
+  among overlapping zones), and on drop the window **snaps** to it. Hold **Shift +
+  Ctrl** and drag across several zones to **span** them (snap to their bounding box).
+  Zones come from a JSON config (see below). Drag without Shift → nothing.
 
   - Overlay: a *passive* `OffscreenQuickScene` (QML) blitted in `paintScreen` — no
     input interception, so `mouseChanged` keeps tracking the cursor during the move.
@@ -155,7 +156,8 @@ cd kwin-fancyzones
 
 It installs build deps, compiles the effect, installs `fancyzones.so` to the Qt6
 plugin dir, and enables it in `kwinrc`. Log out/in (or `kwin_wayland --replace`) to
-activate, then **drag a window with Shift held** to snap it to a zone.
+activate, then **drag a window with Shift held** to snap it to a zone (hold **Shift +
+Ctrl** and drag across zones to span them).
 
 ## Configuring zones
 

@@ -22,6 +22,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -162,10 +163,14 @@ void FancyZonesEffect::ensureOverlay()
     m_overlay->show();
 }
 
-void FancyZonesEffect::pushHighlight(int idx)
+void FancyZonesEffect::pushHighlight()
 {
     if (m_overlay && m_overlay->rootItem()) {
-        m_overlay->rootItem()->setProperty("highlighted", idx);
+        QVariantList sel;
+        for (int i : m_selection) {
+            sel.append(i);
+        }
+        m_overlay->rootItem()->setProperty("highlighted", sel);
         m_overlay->update();
         effects->addRepaintFull();
     }
@@ -174,11 +179,38 @@ void FancyZonesEffect::pushHighlight(int idx)
 void FancyZonesEffect::updateHighlight()
 {
     const int idx = pick(m_cursor);
-    if (idx != m_highlight) {
-        m_highlight = idx;
-        qInfo().noquote() << "[fzeffect] highlight" << (idx >= 0 ? m_zones[idx].name : QStringLiteral("none"));
+    const bool span = m_mods & Qt::ControlModifier; // Ctrl = accumulate zones (span)
+    QList<int> next;
+    if (span) {
+        next = m_selection;
+        if (idx >= 0 && !next.contains(idx)) {
+            next.append(idx);
+        }
+    } else {
+        if (idx >= 0) {
+            next = { idx };
+        }
     }
-    pushHighlight(idx);
+    if (next != m_selection) {
+        m_selection = next;
+        QStringList names;
+        for (int i : m_selection) {
+            names << m_zones[i].name;
+        }
+        qInfo().noquote() << "[fzeffect] highlight" << (names.isEmpty() ? QStringLiteral("none") : names.join(QLatin1Char('+')));
+    }
+    pushHighlight();
+}
+
+// Bounding box of the currently selected zones (empty if none).
+QRectF FancyZonesEffect::selectionRect() const
+{
+    QRectF box;
+    for (int i : m_selection) {
+        const QRectF r = rectFor(m_zones[i]);
+        box = box.isNull() ? r : box.united(r);
+    }
+    return box;
 }
 
 void FancyZonesEffect::updateGate()
@@ -195,10 +227,11 @@ void FancyZonesEffect::setActive(bool active)
     qInfo().noquote() << "[fzeffect] overlay" << (active ? "SHOWN" : "hidden");
     if (active) {
         m_captured = false;
+        m_selection.clear();
         ensureOverlay();
         updateHighlight();
     } else {
-        m_highlight = -1;
+        m_selection.clear();
     }
     effects->addRepaintFull();
 }
@@ -216,12 +249,15 @@ void FancyZonesEffect::hookWindow(EffectWindow *w)
     });
     connect(w, &EffectWindow::windowFinishUserMovedResized, this, [this](EffectWindow *win) {
         qInfo().noquote() << "[fzeffect] move finish" << win->caption();
-        if (m_active) {
-            const int idx = pick(m_cursor);
-            if (idx >= 0 && win->window()) {
-                const QRectF r = rectFor(m_zones[idx]);
+        if (m_active && !m_selection.isEmpty() && win->window()) {
+            const QRectF r = selectionRect(); // bounding box of all selected zones (span)
+            if (!r.isNull()) {
+                QStringList names;
+                for (int i : m_selection) {
+                    names << m_zones[i].name;
+                }
                 win->window()->moveResize(r);
-                qInfo().noquote() << "[fzeffect] snapped to" << m_zones[idx].name << "target" << r;
+                qInfo().noquote() << "[fzeffect] snapped to" << names.join(QLatin1Char('+')) << "target" << r;
             }
         }
         m_movingWindow = nullptr;

@@ -67,11 +67,19 @@ scenario() {
   # Drag toward the LEFT zone (drop cursor at 300,540 — inside "left" only). For the
   # Shift scenario, press Shift mid-drag and keep it held THROUGH the finish so the
   # snap fires; expect highlight "left" and a snap to the left zone (0,0 640x1080).
+  # evdev: Ctrl=29 (span/accumulate zones).
   { echo "k 125 1"; echo "s 150"
     echo "m 950 540"; echo "s 150"
     echo "b 272 1"; echo "s 200"        # Meta+Left => start interactive move
-    echo "m 700 540"; echo "s 150"      # dragging (no Shift yet)
-    if [ "$shift" = "shift" ]; then
+    echo "m 700 540"; echo "s 150"      # dragging (no modifier yet)
+    if [ "$shift" = "span" ]; then
+      echo "k 42 1"; echo "k 29 1"; echo "s 100"  # Shift + Ctrl => span mode
+      echo "m 960 540"; echo "s 200"    # over MIDDLE => select middle
+      echo "m 300 540"; echo "s 200"    # over LEFT   => accumulate left
+      echo "s 400"
+      echo "b 272 0"; echo "s 200"      # finish => snap to bounding box(middle,left)
+      echo "k 29 0"; echo "k 42 0"; echo "s 100"
+    elif [ "$shift" = "shift" ]; then
       echo "k 42 1"; echo "s 100"       # press Shift mid-drag => gate activates (overlay shown)
       echo "m 500 540"; echo "s 200"
       echo "m 300 540"; echo "s 200"    # cursor now inside the LEFT zone => highlight "left"
@@ -133,4 +141,15 @@ grep -q "\[fzeffect\] snapped to L"  /logs/scen-config.log || fail "config: did 
 grep -q "960x1080"                   /logs/scen-config.log || fail "config: snap geometry not the 50% half (expected 960x1080)"
 echo "config zones honored -> snapped to L (960x1080)"
 
-echo "EFFECT TEST PASSED — Shift-gated overlay highlights the cursor's zone and snaps the window to it on drop"
+# --- scenario D: multi-zone span (Shift + Ctrl) ---
+echo "### scenario D: span across zones (Shift+Ctrl) ###"
+scenario /logs/scen-span.log span
+echo "----- span [fzeffect] -----"; grep -E "\[fzeffect\]" /logs/scen-span.log | grep -vE "highlight " | head
+# Dragging over middle then left with Ctrl held selects both; snap = their bounding box
+# (0,0 1280x1080), proving span works.
+grep -q "\[fzeffect\] highlight middle+left" /logs/scen-span.log || fail "span: did not accumulate middle+left"
+grep -q "\[fzeffect\] snapped to middle+left" /logs/scen-span.log || fail "span: did not snap to the spanned zones"
+grep -q "1280x1080"                          /logs/scen-span.log || fail "span: snap geometry not the middle+left bounding box (expected 1280x1080)"
+echo "span honored -> snapped to middle+left (1280x1080)"
+
+echo "EFFECT TEST PASSED — Shift-gated overlay, live highlight, snap, config zones, and multi-zone span"

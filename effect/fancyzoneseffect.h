@@ -48,15 +48,16 @@ private:
     void setActive(bool active);
     void updateHighlight();
     void ensureOverlay();
-    void pushHighlight(int idx);
+    void pushHighlight();
     QRectF rectFor(const Zone &z) const;
+    QRectF selectionRect() const;          // bounding box of the selected zones
     int pick(const QPointF &cursor) const; // nearest-center among zones containing cursor; -1 if none
 
     QList<Zone> m_zones;
     Qt::KeyboardModifiers m_mods = Qt::NoModifier;
     EffectWindow *m_movingWindow = nullptr;
     bool m_active = false;
-    int m_highlight = -1;
+    QList<int> m_selection;                 // indices of highlighted/selected zones (span)
     QPointF m_cursor;
     std::unique_ptr<OffscreenQuickScene> m_overlay;
     bool m_captured = false;
