@@ -78,14 +78,47 @@ QString FancyZonesEffect::configPath() const
 }
 
 // Read zones from the JSON config; fall back to the built-in default layout.
+// Supports two formats:
+//   { "zones": [ … ] }                                       (single layout)
+//   { "layouts": [ {"name","zones":[…]}, … ], "activeLayout": <index|name> }
 void FancyZonesEffect::loadZones()
 {
     m_zones.clear();
+    m_layoutName.clear();
     const QString path = configPath();
     QFile f(path);
     if (f.open(QIODevice::ReadOnly)) {
-        const QJsonArray arr = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("zones")).toArray();
-        for (const QJsonValue &v : arr) {
+        const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+        QJsonArray zoneArr;
+        if (root.contains(QStringLiteral("layouts"))) {
+            const QJsonArray layouts = root.value(QStringLiteral("layouts")).toArray();
+            int active = 0;
+            const QJsonValue av = root.value(QStringLiteral("activeLayout"));
+            if (av.isString()) {
+                for (int i = 0; i < layouts.size(); ++i) {
+                    if (layouts[i].toObject().value(QStringLiteral("name")).toString() == av.toString()) {
+                        active = i;
+                        break;
+                    }
+                }
+            } else if (av.isDouble()) {
+                active = av.toInt();
+            }
+            if (active < 0 || active >= layouts.size()) {
+                active = 0;
+            }
+            const QJsonObject layout = layouts.isEmpty() ? QJsonObject() : layouts.at(active).toObject();
+            m_layoutName = layout.value(QStringLiteral("name")).toString();
+            zoneArr = layout.value(QStringLiteral("zones")).toArray();
+            if (!zoneArr.isEmpty()) {
+                qInfo().noquote() << "[fzeffect] active layout"
+                                  << (m_layoutName.isEmpty() ? QString::number(active) : m_layoutName)
+                                  << QStringLiteral("(%1/%2)").arg(active + 1).arg(layouts.size());
+            }
+        } else {
+            zoneArr = root.value(QStringLiteral("zones")).toArray(); // single-layout format
+        }
+        for (const QJsonValue &v : zoneArr) {
             const QJsonObject o = v.toObject();
             m_zones.append(Zone{ o.value(QStringLiteral("name")).toString(),
                                  o.value(QStringLiteral("x")).toDouble(),

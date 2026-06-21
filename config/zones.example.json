@@ -1,9 +1,22 @@
 {
-  "_comment": "Copy to ~/.config/kwin-fancyzones/zones.json and edit. x/y/width/height are percentages of the screen work area. Zones may overlap; the zone whose center is nearest the cursor wins. Re-login or 'kwin_wayland --replace' (or change any KWin setting) to reload.",
-  "zones": [
-    { "name": "left",   "x": 0,     "y": 0,  "width": 33.34, "height": 100 },
-    { "name": "middle", "x": 33.33, "y": 0,  "width": 33.34, "height": 100 },
-    { "name": "right",  "x": 66.66, "y": 0,  "width": 33.34, "height": 100 },
-    { "name": "focus",  "x": 30,    "y": 55, "width": 40,    "height": 40  }
+  "_comment": "Copy to ~/.config/kwin-fancyzones/zones.json and edit. x/y/width/height are percentages of the screen work area. Zones may overlap (nearest-center wins). Define one or more named layouts and pick the active one with activeLayout (a name or 0-based index). Re-login or 'kwin_wayland --replace' (or change any KWin setting) to reload. A single-layout shorthand is also accepted: { \"zones\": [ ... ] }.",
+  "activeLayout": "thirds",
+  "layouts": [
+    {
+      "name": "thirds",
+      "zones": [
+        { "name": "left",   "x": 0,     "y": 0,  "width": 33.34, "height": 100 },
+        { "name": "middle", "x": 33.33, "y": 0,  "width": 33.34, "height": 100 },
+        { "name": "right",  "x": 66.66, "y": 0,  "width": 33.34, "height": 100 },
+        { "name": "focus",  "x": 30,    "y": 55, "width": 40,    "height": 40  }
+      ]
+    },
+    {
+      "name": "halves",
+      "zones": [
+        { "name": "left",  "x": 0,  "y": 0, "width": 50, "height": 100 },
+        { "name": "right", "x": 50, "y": 0, "width": 50, "height": 100 }
+      ]
+    }
   ]
 }

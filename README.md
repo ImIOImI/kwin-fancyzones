@@ -171,17 +171,24 @@ cp config/zones.example.json ~/.config/kwin-fancyzones/zones.json
 ```
 
 Each zone is percentages of the screen work area; zones may overlap (nearest-center
-wins):
+wins). Define one or more **named layouts** and pick the active one with
+`activeLayout` (a name or 0-based index):
 
 ```json
-{ "zones": [
-  { "name": "left",  "x": 0,  "y": 0, "width": 50, "height": 100 },
-  { "name": "right", "x": 50, "y": 0, "width": 50, "height": 100 }
-] }
+{
+  "activeLayout": "halves",
+  "layouts": [
+    { "name": "thirds", "zones": [ /* … */ ] },
+    { "name": "halves", "zones": [
+        { "name": "left",  "x": 0,  "y": 0, "width": 50, "height": 100 },
+        { "name": "right", "x": 50, "y": 0, "width": 50, "height": 100 } ] }
+  ]
+}
 ```
 
-With no config file, a built-in default layout is used (3-column grid + a centered
-`focus` zone). A visual zone editor is a future feature.
+A single-layout shorthand also works: `{ "zones": [ … ] }`. With no config file, a
+built-in default layout is used (3-column grid + a centered `focus` zone). Switching
+the active layout by keyboard shortcut, and a visual zone editor, are future features.
 
 ## Repo layout
 

@@ -121,25 +121,33 @@ grep -q "\[fzeffect\] captured overlay" /logs/scen-shift.log || fail "shift: ove
 [ -s /logs/overlay.png ] || fail "shift: overlay.png not written"
 echo "overlay rendered -> /logs/overlay.png ($(stat -c%s /logs/overlay.png) bytes)"
 
-# --- scenario C: zones come from a config file (FZ_ZONES) ---
-echo "### scenario C: custom zones from config file ###"
+# --- scenario C: named layouts in the config; activeLayout selects one ---
+echo "### scenario C: named layouts from config (activeLayout) ###"
 cat > /work/zones.json <<'JSON'
-{ "zones": [
-  { "name": "L", "x": 0,  "y": 0, "width": 50, "height": 100 },
-  { "name": "R", "x": 50, "y": 0, "width": 50, "height": 100 }
-] }
+{ "layouts": [
+    { "name": "thirds", "zones": [
+        { "name": "left",   "x": 0,     "y": 0, "width": 33.34, "height": 100 },
+        { "name": "middle", "x": 33.33, "y": 0, "width": 33.34, "height": 100 },
+        { "name": "right",  "x": 66.66, "y": 0, "width": 33.34, "height": 100 } ] },
+    { "name": "halves", "zones": [
+        { "name": "L", "x": 0,  "y": 0, "width": 50, "height": 100 },
+        { "name": "R", "x": 50, "y": 0, "width": 50, "height": 100 } ] }
+  ],
+  "activeLayout": "halves"
+}
 JSON
 export FZ_ZONES=/work/zones.json
 scenario /logs/scen-config.log shift
 unset FZ_ZONES
 echo "----- config [fzeffect] -----"; grep -E "\[fzeffect\]" /logs/scen-config.log | grep -vE "highlight (L|R)$" || true
-# The drop at 300,540 lands in the configured left half "L" (0,0 960x1080), proving the
-# config drives both the zone set and snapping (vs the default 640-wide "left").
-grep -q "loaded 2 zones from /work/zones.json" /logs/scen-config.log || fail "config: zones.json not loaded"
-grep -q "\[fzeffect\] highlight L"   /logs/scen-config.log || fail "config: did not highlight the configured 'L' zone"
-grep -q "\[fzeffect\] snapped to L"  /logs/scen-config.log || fail "config: did not snap to the configured 'L' zone"
+# activeLayout="halves" (index 1) must be chosen over "thirds" (index 0): 2 zones, and
+# the drop at 300,540 snaps to the 50% half "L" (960x1080), not thirds' 640-wide "left".
+grep -q "active layout halves"       /logs/scen-config.log || fail "config: did not select the 'halves' layout"
+grep -q "loaded 2 zones from /work/zones.json" /logs/scen-config.log || fail "config: layout zones not loaded"
+grep -q "\[fzeffect\] highlight L"   /logs/scen-config.log || fail "config: did not highlight the 'L' zone"
+grep -q "\[fzeffect\] snapped to L"  /logs/scen-config.log || fail "config: did not snap to the 'L' zone"
 grep -q "960x1080"                   /logs/scen-config.log || fail "config: snap geometry not the 50% half (expected 960x1080)"
-echo "config zones honored -> snapped to L (960x1080)"
+echo "named layouts honored -> active 'halves', snapped to L (960x1080)"
 
 # --- scenario D: multi-zone span (Shift + Ctrl) ---
 echo "### scenario D: span across zones (Shift+Ctrl) ###"

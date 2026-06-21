@@ -53,7 +53,8 @@ private:
     QRectF selectionRect() const;          // bounding box of the selected zones
     int pick(const QPointF &cursor) const; // nearest-center among zones containing cursor; -1 if none
 
-    QList<Zone> m_zones;
+    QList<Zone> m_zones;        // zones of the active layout
+    QString m_layoutName;       // name of the active layout (for logging)
     Qt::KeyboardModifiers m_mods = Qt::NoModifier;
     EffectWindow *m_movingWindow = nullptr;
     bool m_active = false;
