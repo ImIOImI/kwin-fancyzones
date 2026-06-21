@@ -39,7 +39,8 @@ mkdir -p "$QTP/kwin/effects/plugins"; cp /work/build/fancyzones.so "$QTP/kwin/ef
 export XDG_RUNTIME_DIR=/tmp/xdgrt; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 eval "$(dbus-launch --sh-syntax)"; export DBUS_SESSION_BUS_ADDRESS
-export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 LIBGL_ALWAYS_SOFTWARE=1 KWIN_COMPOSE=O WAYLAND_DISPLAY=wayland-0
+export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 LIBGL_ALWAYS_SOFTWARE=1 WAYLAND_DISPLAY=wayland-0
+export KWIN_COMPOSE="${KWIN_COMPOSE:-O}"   # O=OpenGL (default), Q=QPainter (exercises the software path)
 export FZ_CAPTURE=/logs/overlay.png   # the effect saves the overlay's render here when active
 rm -f /logs/overlay.png
 

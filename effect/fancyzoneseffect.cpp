@@ -5,6 +5,7 @@
 #include <effect/offscreenquickview.h>
 #include <window.h> // KWin::Window::moveResize (internal)
 
+#include <core/rendertarget.h>
 #include <core/renderviewport.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
@@ -13,6 +14,7 @@
 #include <QQuickItem>
 #include <QImage>
 #include <QMatrix4x4>
+#include <QPainter>
 #include <QDebug>
 #include <QUrl>
 
@@ -187,8 +189,20 @@ void FancyZonesEffect::paintScreen(const RenderTarget &renderTarget, const Rende
         }
     }
 
-    // Blit the overlay over the screen (premultiplied alpha). Upload the rendered image
-    // to a texture so this works under both software GL (headless) and real GPUs.
+    // QPainter (software) compositing path — e.g. KWin nested in WSLg, which only
+    // offers QPainter. The render target wraps a QImage we can draw onto directly.
+    if (QImage *target = renderTarget.image()) {
+        QPainter p(target);
+        if (p.isActive()) {
+            p.setRenderHint(QPainter::SmoothPixmapTransform);
+            p.drawImage(viewport.mapToRenderTarget(QRectF(m_overlay->geometry())), img);
+            qInfo() << "[fzeffect] overlay painted (QPainter)";
+        }
+        return;
+    }
+
+    // OpenGL compositing path. Upload the rendered image to a texture and blit it
+    // (premultiplied alpha) — works under both software GL and real GPUs.
     std::unique_ptr<GLTexture> tex = GLTexture::upload(img);
     if (!tex) {
         return;

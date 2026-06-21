@@ -22,9 +22,13 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 || "$REPO/scripts/build-effect-ima
 GPU=()
 [ -e /dev/dxg ] && GPU=(--device /dev/dxg -v /usr/lib/wsl:/usr/lib/wsl:ro)
 
+# Bind-mount only the host's wayland socket (as an absolute path) and give the
+# container its own root-owned XDG_RUNTIME_DIR — otherwise KWin can't create its own
+# compositor socket (the host socket would occupy the slot) and dbus-launch fails on
+# the host-owned runtime dir.
 exec docker run --rm -it --privileged \
-  -e XDG_RUNTIME_DIR=/wslg -e "WAYLAND_DISPLAY=$WAYLAND_DISPLAY" \
-  -v "$HOST_RT:/wslg" \
+  -e XDG_RUNTIME_DIR=/tmp/fzxdg -e "WAYLAND_DISPLAY=/wslg/$WAYLAND_DISPLAY" \
+  -v "$HOST_RT/$WAYLAND_DISPLAY:/wslg/$WAYLAND_DISPLAY" \
   "${GPU[@]}" \
   -v "$REPO/effect:/opt/effect:ro" \
   -v "$REPO/scripts/harness-wayland:/opt/hw:ro" \

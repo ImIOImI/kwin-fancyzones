@@ -34,6 +34,9 @@ export LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH:-}
 [ -e /dev/dxg ] || export LIBGL_ALWAYS_SOFTWARE=1
 export KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
 
+# Own root-owned runtime dir (KWin creates its own compositor socket here; it connects
+# to the host compositor via the absolute WAYLAND_DISPLAY path).
+mkdir -p "${XDG_RUNTIME_DIR:-/tmp/fzxdg}" && chmod 700 "${XDG_RUNTIME_DIR:-/tmp/fzxdg}"
 # XWayland needs this socket dir (so the X11 test windows can map); session bus for KWin.
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 eval "$(dbus-launch --sh-syntax)"; export DBUS_SESSION_BUS_ADDRESS
