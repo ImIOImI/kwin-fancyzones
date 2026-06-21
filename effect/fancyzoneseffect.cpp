@@ -17,6 +17,13 @@
 #include <QPainter>
 #include <QDebug>
 #include <QUrl>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include <epoxy/gl.h>
 
@@ -25,13 +32,7 @@ namespace KWin
 
 FancyZonesEffect::FancyZonesEffect()
 {
-    // Zone layout (percent of screen). May overlap — "focus" overlaps the middle column.
-    m_zones = {
-        { QStringLiteral("left"), 0, 0, 33.34, 100 },
-        { QStringLiteral("middle"), 33.33, 0, 33.34, 100 },
-        { QStringLiteral("right"), 66.66, 0, 33.34, 100 },
-        { QStringLiteral("focus"), 30, 55, 40, 40 },
-    };
+    loadZones();
 
     connect(effects, &EffectsHandler::mouseChanged, this,
             [this](const QPointF &pos, const QPointF &, Qt::MouseButtons, Qt::MouseButtons,
@@ -56,6 +57,68 @@ FancyZonesEffect::FancyZonesEffect()
 }
 
 FancyZonesEffect::~FancyZonesEffect() = default;
+
+void FancyZonesEffect::reconfigure(ReconfigureFlags)
+{
+    loadZones();
+    if (m_overlay && m_overlay->rootItem()) {
+        m_overlay->rootItem()->setProperty("zones", zonesAsVariant());
+    }
+}
+
+QString FancyZonesEffect::configPath() const
+{
+    const QByteArray override = qgetenv("FZ_ZONES");
+    if (!override.isEmpty()) {
+        return QString::fromLocal8Bit(override);
+    }
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+        + QStringLiteral("/kwin-fancyzones/zones.json");
+}
+
+// Read zones from the JSON config; fall back to the built-in default layout.
+void FancyZonesEffect::loadZones()
+{
+    m_zones.clear();
+    const QString path = configPath();
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly)) {
+        const QJsonArray arr = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("zones")).toArray();
+        for (const QJsonValue &v : arr) {
+            const QJsonObject o = v.toObject();
+            m_zones.append(Zone{ o.value(QStringLiteral("name")).toString(),
+                                 o.value(QStringLiteral("x")).toDouble(),
+                                 o.value(QStringLiteral("y")).toDouble(),
+                                 o.value(QStringLiteral("width")).toDouble(),
+                                 o.value(QStringLiteral("height")).toDouble() });
+        }
+    }
+    if (!m_zones.isEmpty()) {
+        qInfo().noquote() << "[fzeffect] loaded" << m_zones.size() << "zones from" << path;
+        return;
+    }
+    // Built-in default: 3-column grid + a lower-center "focus" zone overlapping the middle.
+    m_zones = {
+        { QStringLiteral("left"), 0, 0, 33.34, 100 },
+        { QStringLiteral("middle"), 33.33, 0, 33.34, 100 },
+        { QStringLiteral("right"), 66.66, 0, 33.34, 100 },
+        { QStringLiteral("focus"), 30, 55, 40, 40 },
+    };
+    qInfo().noquote() << "[fzeffect] using default zones (no config at" << path << ")";
+}
+
+QVariantList FancyZonesEffect::zonesAsVariant() const
+{
+    QVariantList list;
+    for (const Zone &z : m_zones) {
+        list.append(QVariantMap{ { QStringLiteral("name"), z.name },
+                                 { QStringLiteral("x"), z.x },
+                                 { QStringLiteral("y"), z.y },
+                                 { QStringLiteral("w"), z.w },
+                                 { QStringLiteral("h"), z.h } });
+    }
+    return list;
+}
 
 QRectF FancyZonesEffect::rectFor(const Zone &z) const
 {
@@ -90,6 +153,10 @@ void FancyZonesEffect::ensureOverlay()
         m_overlay = std::make_unique<OffscreenQuickScene>(OffscreenQuickView::ExportMode::Image, true);
         m_overlay->setSource(QUrl(QStringLiteral("qrc:/fancyzones/overlay.qml")));
         connect(m_overlay.get(), &OffscreenQuickView::repaintNeeded, this, []() { effects->addRepaintFull(); });
+    }
+    // Feed the configured zones to the overlay QML (single source of truth = the config).
+    if (m_overlay->rootItem()) {
+        m_overlay->rootItem()->setProperty("zones", zonesAsVariant());
     }
     m_overlay->setGeometry(effects->virtualScreenGeometry());
     m_overlay->show();

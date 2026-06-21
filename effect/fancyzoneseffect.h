@@ -12,6 +12,7 @@
 #include <QPointF>
 #include <QRectF>
 #include <QString>
+#include <QVariantList>
 #include <memory>
 
 namespace KWin
@@ -30,6 +31,7 @@ public:
     ~FancyZonesEffect() override;
 
     int requestedEffectChainPosition() const override { return 60; }
+    void reconfigure(ReconfigureFlags flags) override; // re-read the zone config
 
 protected:
     void paintScreen(const RenderTarget &renderTarget, const RenderViewport &viewport,
@@ -38,6 +40,9 @@ protected:
 private:
     struct Zone { QString name; double x, y, w, h; }; // percentages of the screen
 
+    void loadZones();                 // from the JSON config, or built-in defaults
+    QString configPath() const;       // $FZ_ZONES, else ~/.config/kwin-fancyzones/zones.json
+    QVariantList zonesAsVariant() const; // for handing the zones to the overlay QML
     void hookWindow(EffectWindow *w);
     void updateGate();
     void setActive(bool active);

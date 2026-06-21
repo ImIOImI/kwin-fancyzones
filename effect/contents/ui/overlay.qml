@@ -1,22 +1,14 @@
-// kwin-fancyzones overlay (rendered by the C++ effect via QuickSceneEffect).
-// Draws the zone layout and highlights the active zone (index pushed from C++ as the
-// `highlighted` property). Layout mirrors the approved mockup: 3-column grid + a
-// lower-center "focus" zone overlapping the middle column.
+// kwin-fancyzones overlay (rendered by the C++ effect).
+// Both `zones` (the layout, from the config) and `highlighted` (the active zone index)
+// are pushed from C++, so the config file is the single source of truth.
 import QtQuick
 
 Item {
     id: root
     // QuickSceneView sizes this root item to the screen.
 
-    // Pushed live from the C++ effect (nearest-center zone under the cursor; -1 = none).
-    property int highlighted: -1
-
-    property var zones: [
-        { "name": "left",   "x": 0,     "y": 0,  "w": 33.34, "h": 100 },
-        { "name": "middle", "x": 33.33, "y": 0,  "w": 33.34, "h": 100 },
-        { "name": "right",  "x": 66.66, "y": 0,  "w": 33.34, "h": 100 },
-        { "name": "focus",  "x": 30,    "y": 55, "w": 40,    "h": 40  }
-    ]
+    property int highlighted: -1   // nearest-center zone under the cursor; -1 = none
+    property var zones: []          // [{name,x,y,w,h}, …] in percent; set by the effect
 
     Repeater {
         model: root.zones

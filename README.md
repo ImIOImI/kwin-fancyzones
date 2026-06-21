@@ -157,6 +157,30 @@ It installs build deps, compiles the effect, installs `fancyzones.so` to the Qt6
 plugin dir, and enables it in `kwinrc`. Log out/in (or `kwin_wayland --replace`) to
 activate, then **drag a window with Shift held** to snap it to a zone.
 
+## Configuring zones
+
+Zones are read from a JSON config — no recompile needed. Copy the example and edit:
+
+```bash
+mkdir -p ~/.config/kwin-fancyzones
+cp config/zones.example.json ~/.config/kwin-fancyzones/zones.json
+# edit zones.json, then reload KWin (re-login, `kwin_wayland --replace`,
+# or just toggle any KWin setting — the effect re-reads its config on reconfigure)
+```
+
+Each zone is percentages of the screen work area; zones may overlap (nearest-center
+wins):
+
+```json
+{ "zones": [
+  { "name": "left",  "x": 0,  "y": 0, "width": 50, "height": 100 },
+  { "name": "right", "x": 50, "y": 0, "width": 50, "height": 100 }
+] }
+```
+
+With no config file, a built-in default layout is used (3-column grid + a centered
+`focus` zone). A visual zone editor is a future feature.
+
 ## Repo layout
 
 ```
